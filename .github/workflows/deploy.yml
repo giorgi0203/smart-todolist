@@ -161,6 +161,7 @@ jobs:
           debug: true
           source: "deploy/nextjs/nextjs-standalone.tar.gz"
           target: "/tmp/"
+          strip_components: 2
 
       # Copy Next.js packaged static assets
       - name: Copy Next.js static package
@@ -174,6 +175,7 @@ jobs:
           debug: true
           source: "deploy/nextjs-static/nextjs-static.tar.gz"
           target: "/tmp/"
+          strip_components: 2
 
       # Copy Next.js packaged public assets
       - name: Copy Next.js public package
@@ -187,6 +189,7 @@ jobs:
           debug: true
           source: "deploy/nextjs-public/nextjs-public.tar.gz"
           target: "/tmp/"
+          strip_components: 2
 
       # Copy .NET agent build
       - name: Copy agent build
@@ -218,6 +221,11 @@ jobs:
           envs: GITHUB_TOKEN_SECRET
           script: |
             echo "=== Finalizing Deployment ==="
+
+            # Validate uploaded web artifacts before extraction.
+            test -f /tmp/nextjs-standalone.tar.gz
+            test -f /tmp/nextjs-static.tar.gz
+            test -f /tmp/nextjs-public.tar.gz
 
             # Extract Next.js standalone artifacts on server.
             sudo rm -rf /var/www/smart-todolist/current/nextjs

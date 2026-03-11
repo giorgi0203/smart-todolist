@@ -236,6 +236,21 @@ jobs:
             sudo tar -xzf /tmp/nextjs-public.tar.gz -C /var/www/smart-todolist/current/nextjs
             sudo rm -f /tmp/nextjs-standalone.tar.gz /tmp/nextjs-static.tar.gz /tmp/nextjs-public.tar.gz
 
+            # Some standalone archives can contain an extra top-level folder.
+            if [ ! -f /var/www/smart-todolist/current/nextjs/server.js ]; then
+              NESTED_SERVER=$(find /var/www/smart-todolist/current/nextjs -mindepth 2 -maxdepth 4 -type f -name server.js | head -n 1 || true)
+              if [ -n "${NESTED_SERVER}" ]; then
+                NESTED_DIR=$(dirname "${NESTED_SERVER}")
+                sudo cp -a "${NESTED_DIR}"/. /var/www/smart-todolist/current/nextjs/
+              fi
+            fi
+
+            if [ ! -f /var/www/smart-todolist/current/nextjs/server.js ]; then
+              echo "ERROR: server.js missing after extraction"
+              find /var/www/smart-todolist/current/nextjs -maxdepth 4 -type f | sed -n '1,120p'
+              exit 1
+            fi
+
             # Write the agent environment file with the GitHub token
             echo "Writing agent environment config..."
             sudo tee /var/www/smart-todolist/current/agent/appsettings.Production.json > /dev/null <<EOF
@@ -260,12 +275,25 @@ jobs:
             # Verify files
             echo "Next.js files:"
             ls -la /var/www/smart-todolist/current/nextjs/
+            echo "Next.js sample tree:"
+            find /var/www/smart-todolist/current/nextjs -maxdepth 3 -type f | sed -n '1,80p'
             echo "Agent files:"
             ls -la /var/www/smart-todolist/current/agent/
 
             # Copy systemd service files (deployed via scp in earlier step)
             # Service files are installed by setup-server.sh on first deploy
             sudo systemctl daemon-reload
+
+            # Kill any stale listeners that can block service startup.
+            for PORT in 3000 8000; do
+              PIDS=$(sudo ss -ltnp "sport = :${PORT}" 2>/dev/null | awk -F'pid=' 'NR>1 {split($2,a,","); print a[1]}' | sort -u)
+              if [ -n "${PIDS}" ]; then
+                echo "Killing stale listeners on :${PORT}: ${PIDS}"
+                for PID in ${PIDS}; do
+                  sudo kill -9 "${PID}" || true
+                done
+              fi
+            done
 
             # Start services
             echo "Starting services..."
@@ -276,8 +304,10 @@ jobs:
             sleep 3
             echo "Agent status:"
             sudo systemctl status smart-todolist-agent --no-pager || true
+            sudo journalctl -u smart-todolist-agent -n 80 --no-pager -l || true
             echo "Web status:"
             sudo systemctl status smart-todolist-web --no-pager || true
+            sudo journalctl -u smart-todolist-web -n 80 --no-pager -l || true
 
             # Test nginx config and reload
             echo "Testing nginx configuration..."

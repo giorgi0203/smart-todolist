@@ -24,10 +24,10 @@ if ! command -v node &> /dev/null; then
 fi
 echo "Node.js version: $(node --version)"
 
-# Install .NET 10 runtime
-echo "Installing .NET 10 runtime..."
+# Install ASP.NET Core 10 runtime (required for the agent)
+echo "Installing ASP.NET Core 10 runtime..."
 if ! command -v dotnet &> /dev/null; then
-    apt-get install -y dotnet-runtime-10.0 || {
+    apt-get install -y aspnetcore-runtime-10.0 || {
         # Fallback: use Microsoft package feed
         wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
         chmod +x dotnet-install.sh

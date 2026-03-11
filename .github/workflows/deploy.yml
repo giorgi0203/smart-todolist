@@ -37,6 +37,12 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
 
+      - name: Package Next.js standalone artifacts
+        run: |
+          tar -C .next/standalone -czf nextjs-standalone.tar.gz .
+          tar -C .next -czf nextjs-static.tar.gz static
+          tar -C . -czf nextjs-public.tar.gz public
+
       # Setup .NET and publish the agent
       - uses: actions/setup-dotnet@v4
         with:
@@ -45,20 +51,25 @@ jobs:
       - name: Publish .NET agent
         run: dotnet publish agent/ProverbsAgent.csproj -c Release -o agent-publish
 
-      # Upload Next.js build artifacts
+      # Upload packaged Next.js standalone server
       - uses: actions/upload-artifact@v4
         with:
-          name: nextjs-build
-          path: .next/standalone/
+          name: nextjs-standalone
+          path: nextjs-standalone.tar.gz
           retention-days: 1
 
-      # Upload Next.js static assets
+      # Upload packaged Next.js static assets
       - uses: actions/upload-artifact@v4
         with:
           name: nextjs-static
-          path: |
-            .next/static/
-            public/
+          path: nextjs-static.tar.gz
+          retention-days: 1
+
+      # Upload packaged Next.js public assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-public
+          path: nextjs-public.tar.gz
           retention-days: 1
 
       # Upload .NET agent artifacts
@@ -78,13 +89,18 @@ jobs:
       # Download all artifacts
       - uses: actions/download-artifact@v4
         with:
-          name: nextjs-build
+          name: nextjs-standalone
           path: deploy/nextjs/
 
       - uses: actions/download-artifact@v4
         with:
           name: nextjs-static
           path: deploy/nextjs-static/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextjs-public
+          path: deploy/nextjs-public/
 
       - uses: actions/download-artifact@v4
         with:
@@ -133,8 +149,8 @@ jobs:
             sudo chown -R $USER:www-data /var/www/smart-todolist/current
             echo "Deployment directory prepared"
 
-      # Copy Next.js standalone build
-      - name: Copy Next.js build
+      # Copy Next.js packaged standalone build
+      - name: Copy Next.js standalone package
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.DROPLET_HOST }}
@@ -143,12 +159,11 @@ jobs:
           port: 22
           timeout: 60s
           debug: true
-          source: "deploy/nextjs/*"
-          target: "/var/www/smart-todolist/current/nextjs/"
-          strip_components: 2
+          source: "deploy/nextjs/nextjs-standalone.tar.gz"
+          target: "/tmp/"
 
-      # Copy Next.js static assets
-      - name: Copy static assets
+      # Copy Next.js packaged static assets
+      - name: Copy Next.js static package
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.DROPLET_HOST }}
@@ -157,9 +172,21 @@ jobs:
           port: 22
           timeout: 60s
           debug: true
-          source: "deploy/nextjs-static/*"
-          target: "/var/www/smart-todolist/current/nextjs/"
-          strip_components: 2
+          source: "deploy/nextjs-static/nextjs-static.tar.gz"
+          target: "/tmp/"
+
+      # Copy Next.js packaged public assets
+      - name: Copy Next.js public package
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: 22
+          timeout: 60s
+          debug: true
+          source: "deploy/nextjs-public/nextjs-public.tar.gz"
+          target: "/tmp/"
 
       # Copy .NET agent build
       - name: Copy agent build
@@ -192,20 +219,14 @@ jobs:
           script: |
             echo "=== Finalizing Deployment ==="
 
-            # Move static assets into the right place for Next.js standalone
-            mkdir -p /var/www/smart-todolist/current/nextjs/.next/static
-            if [ -d "/var/www/smart-todolist/current/nextjs/.next/static" ]; then
-              echo "Static assets already in place"
-            fi
-            # Copy static dir if it was extracted separately
-            if [ -d "/var/www/smart-todolist/current/nextjs/static" ]; then
-              cp -r /var/www/smart-todolist/current/nextjs/static/* /var/www/smart-todolist/current/nextjs/.next/static/ 2>/dev/null || true
-            fi
-            # Copy public dir
-            if [ -d "/var/www/smart-todolist/current/nextjs/public" ]; then
-              mkdir -p /var/www/smart-todolist/current/nextjs/public
-              echo "Public assets in place"
-            fi
+            # Extract Next.js standalone artifacts on server.
+            sudo rm -rf /var/www/smart-todolist/current/nextjs
+            sudo mkdir -p /var/www/smart-todolist/current/nextjs
+            sudo tar -xzf /tmp/nextjs-standalone.tar.gz -C /var/www/smart-todolist/current/nextjs
+            sudo mkdir -p /var/www/smart-todolist/current/nextjs/.next
+            sudo tar -xzf /tmp/nextjs-static.tar.gz -C /var/www/smart-todolist/current/nextjs/.next
+            sudo tar -xzf /tmp/nextjs-public.tar.gz -C /var/www/smart-todolist/current/nextjs
+            sudo rm -f /tmp/nextjs-standalone.tar.gz /tmp/nextjs-static.tar.gz /tmp/nextjs-public.tar.gz
 
             # Write the agent environment file with the GitHub token
             echo "Writing agent environment config..."

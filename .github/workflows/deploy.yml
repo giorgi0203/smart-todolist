@@ -1,0 +1,267 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      # Setup Node.js and install dependencies
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - run: pnpm install --frozen-lockfile
+
+      # Lint and build the Next.js app
+      - run: pnpm lint
+      - run: pnpm build
+
+      # Setup .NET and publish the agent
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish .NET agent
+        run: dotnet publish agent/ProverbsAgent.csproj -c Release -o agent-publish
+
+      # Upload Next.js build artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: .next/standalone/
+          retention-days: 1
+
+      # Upload Next.js static assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-static
+          path: |
+            .next/static/
+            public/
+          retention-days: 1
+
+      # Upload .NET agent artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-build
+          path: agent-publish/
+          retention-days: 1
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download all artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextjs-build
+          path: deploy/nextjs/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextjs-static
+          path: deploy/nextjs-static/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-build
+          path: deploy/agent/
+
+      # Test connectivity before deployment
+      - name: Test Droplet Connectivity
+        run: |
+          echo "Testing connectivity to droplet..."
+          ping -c 3 ${{ secrets.DROPLET_HOST }} || echo "Ping failed but continuing..."
+          timeout 10s bash -c "</dev/tcp/${{ secrets.DROPLET_HOST }}/22" && echo "Port 22 is open" || echo "Port 22 connection failed"
+        continue-on-error: true
+
+      # Prepare deployment on server
+      - name: Prepare deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          port: 22
+          timeout: 60s
+          command_timeout: 10m
+          debug: true
+          script: |
+            echo "=== Deployment Started ==="
+            echo "Connected to: $(hostname)"
+
+            # Stop running services
+            echo "Stopping services..."
+            sudo systemctl stop smart-todolist-web || true
+            sudo systemctl stop smart-todolist-agent || true
+
+            # Backup current deployment
+            echo "Backing up current deployment..."
+            sudo rm -rf /var/www/smart-todolist/backup
+            if [ -d "/var/www/smart-todolist/current" ]; then
+              sudo cp -r /var/www/smart-todolist/current /var/www/smart-todolist/backup
+              echo "Backup created"
+            fi
+
+            # Create deployment directories
+            sudo mkdir -p /var/www/smart-todolist/current/nextjs
+            sudo mkdir -p /var/www/smart-todolist/current/agent
+            sudo chown -R $USER:www-data /var/www/smart-todolist/current
+            echo "Deployment directory prepared"
+
+      # Copy Next.js standalone build
+      - name: Copy Next.js build
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          port: 22
+          timeout: 60s
+          debug: true
+          source: "deploy/nextjs/*"
+          target: "/var/www/smart-todolist/current/nextjs/"
+          strip_components: 2
+
+      # Copy Next.js static assets
+      - name: Copy static assets
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          port: 22
+          timeout: 60s
+          debug: true
+          source: "deploy/nextjs-static/*"
+          target: "/var/www/smart-todolist/current/nextjs/"
+          strip_components: 2
+
+      # Copy .NET agent build
+      - name: Copy agent build
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          port: 22
+          timeout: 60s
+          debug: true
+          source: "deploy/agent/*"
+          target: "/var/www/smart-todolist/current/agent/"
+          strip_components: 2
+
+      # Finalize deployment
+      - name: Finalize deployment
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          GITHUB_TOKEN_SECRET: ${{ secrets.AGENT_GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          port: 22
+          timeout: 60s
+          command_timeout: 5m
+          debug: true
+          envs: GITHUB_TOKEN_SECRET
+          script: |
+            echo "=== Finalizing Deployment ==="
+
+            # Move static assets into the right place for Next.js standalone
+            mkdir -p /var/www/smart-todolist/current/nextjs/.next/static
+            if [ -d "/var/www/smart-todolist/current/nextjs/.next/static" ]; then
+              echo "Static assets already in place"
+            fi
+            # Copy static dir if it was extracted separately
+            if [ -d "/var/www/smart-todolist/current/nextjs/static" ]; then
+              cp -r /var/www/smart-todolist/current/nextjs/static/* /var/www/smart-todolist/current/nextjs/.next/static/ 2>/dev/null || true
+            fi
+            # Copy public dir
+            if [ -d "/var/www/smart-todolist/current/nextjs/public" ]; then
+              mkdir -p /var/www/smart-todolist/current/nextjs/public
+              echo "Public assets in place"
+            fi
+
+            # Write the agent environment file with the GitHub token
+            echo "Writing agent environment config..."
+            sudo tee /var/www/smart-todolist/current/agent/appsettings.Production.json > /dev/null <<EOF
+            {
+              "GitHubToken": "${GITHUB_TOKEN_SECRET}",
+              "Logging": {
+                "LogLevel": {
+                  "Default": "Warning",
+                  "Microsoft.AspNetCore": "Warning"
+                }
+              },
+              "AllowedHosts": "*"
+            }
+            EOF
+
+            # Set permissions
+            echo "Setting permissions..."
+            sudo chown -R www-data:www-data /var/www/smart-todolist/current
+            sudo chmod -R 755 /var/www/smart-todolist/current
+            sudo chmod +x /var/www/smart-todolist/current/agent/ProverbsAgent || true
+
+            # Verify files
+            echo "Next.js files:"
+            ls -la /var/www/smart-todolist/current/nextjs/
+            echo "Agent files:"
+            ls -la /var/www/smart-todolist/current/agent/
+
+            # Copy systemd service files (deployed via scp in earlier step)
+            # Service files are installed by setup-server.sh on first deploy
+            sudo systemctl daemon-reload
+
+            # Start services
+            echo "Starting services..."
+            sudo systemctl start smart-todolist-agent
+            sudo systemctl start smart-todolist-web
+
+            # Wait and verify
+            sleep 3
+            echo "Agent status:"
+            sudo systemctl status smart-todolist-agent --no-pager || true
+            echo "Web status:"
+            sudo systemctl status smart-todolist-web --no-pager || true
+
+            # Test nginx config and reload
+            echo "Testing nginx configuration..."
+            sudo nginx -t
+            sudo systemctl reload nginx
+
+            # Test local response
+            echo "Testing local response..."
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 || echo "Web test pending startup..."
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "Agent test pending startup..."
+
+            echo "=== Deployment Complete ==="

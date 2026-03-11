@@ -1,0 +1,24 @@
+[Unit]
+Description=Smart TodoList - Next.js Web App
+After=network.target smart-todolist-agent.service
+Wants=smart-todolist-agent.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/smart-todolist/current/nextjs
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smart-todolist-web
+
+[Install]
+WantedBy=multi-user.target

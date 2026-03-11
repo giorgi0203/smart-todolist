@@ -26,7 +26,7 @@ echo "Node.js version: $(node --version)"
 
 # Install ASP.NET Core 10 runtime (required for the agent)
 echo "Installing ASP.NET Core 10 runtime..."
-if ! command -v dotnet &> /dev/null; then
+if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 10\.'; then
     apt-get install -y aspnetcore-runtime-10.0 || {
         # Fallback: use Microsoft package feed
         wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh

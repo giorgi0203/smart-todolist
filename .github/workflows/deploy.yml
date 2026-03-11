@@ -251,6 +251,11 @@ jobs:
               exit 1
             fi
 
+            if [ -z "${GITHUB_TOKEN_SECRET}" ]; then
+              echo "ERROR: AGENT_GITHUB_TOKEN is empty. Set repository secret AGENT_GITHUB_TOKEN before deploy."
+              exit 1
+            fi
+
             # Write the agent environment file with the GitHub token
             echo "Writing agent environment config..."
             sudo tee /var/www/smart-todolist/current/agent/appsettings.Production.json > /dev/null <<EOF
@@ -279,6 +284,8 @@ jobs:
             find /var/www/smart-todolist/current/nextjs -maxdepth 3 -type f | sed -n '1,80p'
             echo "Agent files:"
             ls -la /var/www/smart-todolist/current/agent/
+            echo "Installed dotnet runtimes:"
+            dotnet --list-runtimes || true
 
             # Copy systemd service files (deployed via scp in earlier step)
             # Service files are installed by setup-server.sh on first deploy

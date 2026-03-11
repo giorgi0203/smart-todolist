@@ -117,11 +117,14 @@ public class TodoAgentFactory
         _jsonSerializerOptions = jsonSerializerOptions;
 
         // Get the GitHub token from configuration
-        var githubToken = _configuration["GitHubToken"]
-            ?? throw new InvalidOperationException(
-                "GitHubToken not found in configuration. " +
-                "Please set it using: dotnet user-secrets set GitHubToken \"<your-token>\" " +
-                "or get it using: gh auth token");
+        var githubToken = _configuration["GitHubToken"];
+        if (string.IsNullOrWhiteSpace(githubToken))
+        {
+            throw new InvalidOperationException(
+                "GitHubToken is missing or empty in configuration. " +
+                "Set AGENT_GITHUB_TOKEN in GitHub Actions secrets for production, " +
+                "or run: dotnet user-secrets set GitHubToken \"<your-token>\" for local development.");
+        }
 
         _openAiClient = new(
             new System.ClientModel.ApiKeyCredential(githubToken),

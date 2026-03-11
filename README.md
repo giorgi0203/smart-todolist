@@ -1,236 +1,205 @@
-# CopilotKit <> Microsoft Agent Framework Starter
+# Smart TodoList (Next.js + CopilotKit + Microsoft Agent Framework)
 
-This is a starter template for building AI agents using [Microsoft Agent Framework](https://github.com/microsoft/agents) and [CopilotKit](https://copilotkit.ai). It provides a modern Next.js application with an integrated proverbs management agent that demonstrates AG-UI protocol features including shared state, generative UI, and human-in-the-loop workflows.
+Smart TodoList is an AI-assisted task manager with two runtimes:
 
-## Prerequisites
+- A Next.js web app for the UI and CopilotKit chat experience.
+- A .NET agent backend that manages todo state and uses an AI model to enrich tasks.
 
-- **GitHub Personal Access Token** (for GitHub Models API)
-  - Retrieve from GitHub using [these instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic).
-  - or generate via `gh auth token` in your CLI (requires [GitHub CLI](https://github.com/cli/cli?tab=readme-ov-file#installation))
-- **.NET 9.0 SDK**
-  - [Download directly](https://dotnet.microsoft.com/download/dotnet/9.0)
-  - macOS/Linux
-    - [Install via Homebrew](https://formulae.brew.sh/formula/dotnet) (`brew install dotnet@9`) or
-    - <details><summary>Install via <code>curl</code> install script</summary><br />
+The assistant can help users:
 
-      ```bash
-      curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0
-      export PATH="$HOME/.dotnet:$PATH"
-      ```
+- Add and manage tasks.
+- Generate practical task descriptions.
+- Estimate task duration in minutes.
+- Split tasks into actionable subtasks.
+- Sort tasks intelligently by priority/content.
 
-      </details>
-  - Windows
-    - [Install via WinGet](https://winstall.app/apps/Microsoft.DotNet.SDK.9) (`winget install --id=Microsoft.DotNet.SDK.9 -e`)
-- **Node.js 20+**
-  - [Download directly](https://nodejs.org/en/download)
-  - macOS/Linux
-    - [Install via Homebrew](https://formulae.brew.sh/formula/node@24) (`brew install node@24`) or
-    - <details><summary>Install via <code>curl</code> install script</summary><br />
+## Tech Stack
 
-      ```bash
-      # Download and install nvm:
-      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4
+- AI UI/runtime bridge: CopilotKit
+- Agent backend: ASP.NET Core (.NET 10) + Microsoft Agent Framework (AG-UI)
+- Model client: OpenAI client against GitHub Models endpoint
 
-      # in lieu of restarting the shell
-      \. "$HOME/.nvm/nvm.sh"
+## How It Works
 
-      # Download and install Node.js:
-      nvm install 24
-      ```
-
-      </details>
-  - Windows
-    - [Install via WinGet](https://winstall.app/apps/OpenJS.NodeJS) (`winget install --id=OpenJS.NodeJS -v "24.11.0" -e`)
-- Any of the following package managers:
-  - [pnpm](https://pnpm.io/installation) **(recommended)**
-  - [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) (usually installed with Node.js)
-  - [yarn](https://yarnpkg.com/getting-started/install)
-  - [bun](https://bun.com/docs/installation)
-
-> **Note:** This repository ignores lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb) to avoid conflicts between different package managers. Each developer should generate their own lock file using their preferred package manager. After that, make sure to delete it from the .gitignore.
-
-## Getting Started
-
-1. Install dependencies using your preferred package manager:
-
-    ```bash
-    # Using pnpm (recommended)
-    pnpm install
-
-    # Using npm
-    npm install
-
-    # Using yarn
-    yarn install
-
-    # Using bun
-    bun install
-    ```
-
-    > **Note:** This will automatically setup the C# agent as well (restore NuGet packages).
-    >
-    > If you have manual issues, you can run:
-    >
-    > ```sh
-    > npm run install:agent
-    > ```
-
-2. Set up your GitHub token for GitHub Models:
-
-    First, get your GitHub token:
-    ```bash
-    gh auth token
-    ```
-
-    Then, navigate to the agent directory and set it as a user secret:
-    ```bash
-    cd agent
-    dotnet user-secrets set GitHubToken "<your-token>"
-    cd ..
-    ```
-
-    Or set it in one command:
-    ```bash
-    cd agent; dotnet user-secrets set GitHubToken "$(gh auth token)"; cd ..
-    ```
-
-
-3. Start the development server:
-
-    ```bash
-    # Using pnpm
-    pnpm dev
-
-    # Using npm
-    npm run dev
-
-    # Using yarn
-    yarn dev
-
-    # Using bun
-    bun run dev
-    ```
-
-    This will start both the Next.js UI (port 3000) and C# agent server (port 8000) concurrently.
-
-## Available Scripts
-The following scripts can also be run using your preferred package manager:
-- `dev` - Starts both UI and agent servers in development mode
-- `dev:debug` - Starts development servers with debug logging enabled
-- `dev:ui` - Starts only the Next.js UI server
-- `dev:agent` - Starts only the C# agent server
-- `build` - Builds the Next.js application for production
-- `start` - Starts the production server
-- `lint` - Runs ESLint for code linting
-- `install:agent` - Restores NuGet packages for the C# agent
+1. The web app mounts CopilotKit with agent name my_agent.
+2. The Next.js API route at /api/copilotkit forwards chat/runtime traffic to the local agent endpoint at http://localhost:8000/.
+3. The .NET agent receives the current todo state, runs tools (get/add/update/delete/toggle/set), persists todos to a JSON file, then returns:
+	- Updated state as JSON
+	- A short user-facing summary of what changed
 
 ## Project Structure
 
+- src/app: Next.js App Router pages and API endpoints
+- src/components: Todo UI components
+- src/lib/types.ts: Shared frontend state types
+- agent: .NET agent backend and tool logic
+- scripts: Local helper scripts for setup and agent run
+- deploy: Server bootstrap script, nginx config, and systemd unit templates
+- .github/workflows/deploy.yml: CI/CD pipeline for build and deploy
+
+## Prerequisites
+
+- Node.js 20+
+- pnpm 9+ (recommended, lockfile is pnpm)
+- .NET SDK 10.0+
+- A GitHub token with access to GitHub Models (used by the agent as GitHubToken)
+
+## Local Development
+
+### 1) Install dependencies
+
+With pnpm (recommended):
+
+```bash
+pnpm install
 ```
-├── agent/                  # C# Agent (Microsoft Agent Framework)
-│   ├── Program.cs         # Main agent implementation with tools
-│   ├── ProverbsAgent.csproj  # .NET project file
-│   └── Properties/        # Configuration (launch settings)
-├── src/
-│   ├── app/
-│   │   ├── page.tsx      # Main UI with CopilotKit sidebar
-│   │   ├── layout.tsx    # CopilotKit provider setup
-│   │   └── api/
-│   │       └── copilotkit/
-│   │           └── route.ts  # AG-UI integration endpoint
-│   ├── components/       # UI components (weather, proverbs, moon)
-│   └── lib/             # Types and utilities
-└── scripts/             # Helper scripts for agent setup/run
+
+With npm:
+
+```bash
+npm install
 ```
 
-## Features Demonstrated
+Note: postinstall runs scripts/setup-agent.bat on Windows by default. On Linux/macOS, use scripts/setup-agent.sh if needed.
 
-This starter showcases key AG-UI protocol features:
+### 2) Configure agent secret
 
-- **🔄 Shared State**: Proverbs list synchronized between frontend and agent
-- **🎨 Generative UI**: Weather card rendered from backend tool
-- **👤 Human-in-the-Loop**: Moon card with approval workflow
-- **🛠️ Frontend Actions**: Theme color changes from agent
-- **💬 Agentic Chat**: Natural language interface with tool calling
+From the repository root:
 
-## 📚 Documentation
+```bash
+cd agent
+dotnet user-secrets set GitHubToken "<your-github-token>"
+```
 
-- [Microsoft Agent Framework](https://github.com/microsoft/agents) - Learn about Microsoft's agent framework
-- [AG-UI Protocol](https://github.com/copilotkit/ag-ui) - AG-UI protocol specification
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - CopilotKit features and API
-- [Next.js Documentation](https://nextjs.org/docs) - Next.js features and API
-- [GitHub Models](https://github.com/marketplace/models) - Free AI models via GitHub
+This value is required. If missing, the agent exits at startup.
 
-## Contributing
+### 3) Run the app
 
-Feel free to submit issues and enhancement requests! This starter is designed to be easily extensible.
+From the repository root:
 
-## License
+```bash
+pnpm dev
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This starts both:
+
+- Next.js UI on http://localhost:3000
+- .NET agent on http://localhost:8000
+
+Alternative scripts:
+
+- pnpm dev:ui (UI only)
+- pnpm dev:agent (agent only)
+- pnpm dev:debug (same as dev with debug log level)
+
+## Build and Run (Production Mode)
+
+Build web app:
+
+```bash
+pnpm build
+```
+
+Run web app:
+
+```bash
+pnpm start
+```
+
+Publish .NET agent:
+
+```bash
+dotnet publish agent/ProverbsAgent.csproj -c Release -o agent-publish
+```
+
+## Agent Tools (Backend Capabilities)
+
+The .NET agent exposes these operations to the model:
+
+- get_todos
+- add_todo
+- update_todo
+- delete_todo
+- toggle_todo
+- toggle_subtask
+- set_todos (bulk replace, used for sorting/reordering)
+
+Todos are persisted to a todos.json file in the agent runtime directory.
+
+## Deployment Overview
+
+CI/CD is defined in .github/workflows/deploy.yml.
+
+Build job:
+
+- Installs dependencies with pnpm
+- Runs lint and build
+- Packages Next.js standalone artifacts
+- Publishes .NET agent
+- Uploads artifacts
+
+Deploy job (on push to main):
+
+- Downloads build artifacts
+- Copies files to your server
+- Writes agent appsettings.Production.json with GitHub token secret
+- Restarts systemd services for web and agent
+- Reloads nginx
+
+## One-Time Server Setup (Ubuntu)
+
+Use deploy/setup-server.sh on a fresh server. It installs Node.js, ASP.NET runtime, nginx, certbot, creates app directories, and installs systemd services.
+
+Example:
+
+```bash
+ssh root@your-droplet 'bash -s' < deploy/setup-server.sh
+```
+
+Before using it, update the DOMAIN value inside deploy/setup-server.sh.
+
+## Required GitHub Secrets (for deploy workflow)
+
+- DROPLET_HOST
+- DROPLET_USERNAME
+- DROPLET_SSH_KEY
+- DROPLET_SSH_PASSPHRASE (if your key is passphrase-protected)
+- AGENT_GITHUB_TOKEN
+
+AGENT_GITHUB_TOKEN is written to appsettings.Production.json on deploy as GitHubToken.
 
 ## Troubleshooting
 
-### Agent Connection Issues
-If you see "I'm having trouble connecting to my tools", make sure:
-1. The C# agent is running on port 8000
-2. Your GitHub token is set correctly via user secrets
-3. Both servers started successfully (check terminal output)
+Agent fails at startup with token error:
 
-### .NET SDK Not Installed
-If you don't have .NET 9.0 installed:
+- Ensure GitHubToken is set via dotnet user-secrets locally, or AGENT_GITHUB_TOKEN in CI.
 
-**macOS/Linux (Homebrew):**
+UI loads but assistant actions do nothing:
+
+- Confirm agent is running at http://localhost:8000.
+- Confirm Next.js API route /api/copilotkit is reachable.
+
+Port conflicts:
+
+- UI expects port 3000.
+- Agent expects port 8000 (from agent launch profile).
+
+## Useful Commands
+
 ```bash
-brew install dotnet@9
-dotnet --version
+pnpm lint
+pnpm build
+pnpm dev
+pnpm dev:ui
+pnpm dev:agent
 ```
 
-**macOS/Linux (Install Script):**
-```bash
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0
-export PATH="$HOME/.dotnet:$PATH"
-```
-
-**Windows (WinGet):**
-```powershell
-winget install --id=Microsoft.DotNet.SDK.9 -e
-```
-
-**Windows/macOS (Direct Download):**
-- Visit https://dotnet.microsoft.com/download/dotnet/9.0
-- Download and run the installer
-
-### .NET SDK Issues
-If you encounter .NET-related errors:
-```bash
-# Verify .NET SDK is installed
-dotnet --version  # Should be 9.0.x or higher
-
-# Restore packages manually
-cd agent
-dotnet restore
-dotnet run
-```
-
-### GitHub Token Issues
-If the agent fails to start with "GitHubToken not found":
 ```bash
 cd agent
-dotnet user-secrets set GitHubToken "$(gh auth token)"
+dotnet run --launch-profile http
 ```
 
-Or manually:
-```bash
-# Get your token
-gh auth token
+## License
 
-# Set it as a user secret
-cd agent
-dotnet user-secrets set GitHubToken "YOUR_TOKEN_HERE"
-```
-
-### Port Conflicts
-If port 8000 is already in use, you can change it in:
-- `agent/Properties/launchSettings.json` - Update `applicationUrl`
-- `src/app/api/copilotkit/route.ts` - Update the HttpAgent URL
+See LICENSE.

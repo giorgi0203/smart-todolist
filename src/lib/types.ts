@@ -1,5 +1,5 @@
 export type Priority = "low" | "medium" | "high";
-export type User = { id: string; name: string; email: string };
+export type User = { id: string; name: string; email: string; emailVerified: boolean };
 export type Subtask = { id: string; title: string; completed: boolean };
 export type Todo = {
   id: string; projectId: string; title: string; description: string;

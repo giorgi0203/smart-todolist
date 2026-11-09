@@ -2,7 +2,7 @@
 
 A private, saved workspace for projects and tasks at https://smart-todolist.giorgi.app.
 
-- Register/sign in with email and password. Sessions use HttpOnly cookies; passwords use salted scrypt hashes.
+- Register/sign in with email and password. Verify your email before using AI. Sessions use HttpOnly cookies; passwords use salted scrypt hashes.
 - Create projects, move tasks, set priorities/due dates/estimates, and track subtasks.
 - Save tasks immediately. Request AI descriptions, estimates or breakdowns separately, with progress and retry.
 - Preview a project plan before accepting its tasks, sort tasks, fill missing details, and export a project as JSON.
@@ -49,6 +49,16 @@ The installer backs up SQLite, legacy shared data and previous configuration, up
 
 SQLite uses WAL, transactions, owner-scoped queries and task versions to reject stale AI/edit results. Only the service account should access its database directory. Use SQLite's backup API for a live WAL database and keep off-droplet backup copies separately.
 
-AI calls have a 25-second limit and per-user concurrency/daily/minute limits. OpenAI API billing is separate from ChatGPT; configure a project budget and usage alerts in OpenAI. Email verification, password recovery and social sign-in are not implemented.
+AI calls require a verified email and have a 25-second limit, 10 requests/minute and 30 requests/24 hours per account, plus a shared 200 requests/24 hours across the entire app. Quotas are persistent and reserved atomically, so extra accounts cannot evade the shared cap. These are request caps, not an exact dollar budget. OpenAI API billing is separate from ChatGPT; configure a project budget and usage alerts in OpenAI. Password recovery and social sign-in are not implemented.
 
 `agent/`, older `scripts/`, and `deploy/setup-server.sh` are historical. Do not run the legacy installer against the new workspace.
+
+## Verification email
+
+Resend sends from `Smart Todo <noreply@mail.giorgi.app>`. Production reads server-only `/etc/smart-todolist/email.json` through `EMAIL_CONFIG_FILE`. For development, use `EMAIL_API_KEY`, optionally `EMAIL_FROM` and `EMAIL_BASE_URL`. Never expose these to the browser. The reusable setup workflow in the portfolio repository provisions the sending domain with `SMART_TODO_EMAIL_KEY`; DigitalOcean DNS needs its DKIM/SPF/MX records. `api/health` reports whether a key is configured, not delivery success.
+
+Existing and new accounts start unverified. Manual projects/tasks work immediately, and every AI path checks verification on the server. Verification emails contain a one-use 256-bit token in a URL fragment. SQLite stores its SHA256 hash, with a one-hour expiry. GET requests never consume the token: the recipient must press Verify email. Sending a new link invalidates the previous link. Email confirmation does not log anyone in or change a different browser account.
+
+Sending is limited to one attempt/minute, 5/hour and 10/day per account, 10/hour per IP, and 100/day shared. Registration is limited to 5/hour per IP and 50/day shared, with a hidden bot-trap field. These limits also apply when email delivery fails; registration still creates a usable manual workspace and explains the delivery failure. No existing accounts are automatically trusted during migration.
+
+For full local integration/browser tests, also run `node tests/mock-email.mjs` and configure `EMAIL_API_KEY=test-only EMAIL_BASE_URL=http://127.0.0.1:4111` on the app server. This test mail service binds only to loopback and is never included in a production release. `deploy/verify-workspace.py` seeds and removes its own temporary fixtures, exercises the production verification gate and token redemption, and never sends email to fake recipients.

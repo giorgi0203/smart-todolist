@@ -26,7 +26,9 @@ export function endpoint(handler:(req:Request)=>Promise<Response>) {
   };
 }
 export function authLimit(req:Request,email:string) {
-  const ip=req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const ip=clientIp(req);
   takeRateLimit("auth-ip:"+digest(ip),30,15*60*1000);
   takeRateLimit("auth-email:"+digest(email),10,15*60*1000);
 }
+// Nginx overwrites X-Real-IP; never use an arbitrary forwarded chain as identity.
+export function clientIp(req:Request) {return req.headers.get("x-real-ip") || "local";}

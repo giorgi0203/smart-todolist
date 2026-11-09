@@ -51,8 +51,15 @@ export function db() {
     CREATE TABLE IF NOT EXISTS ai_jobs (
       resource TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL, expires_at INTEGER NOT NULL
     );
-    PRAGMA user_version = 1;
   `);
+  // An additive table keeps old releases compatible with this database on rollback.
+  // Existing accounts have no confirmation row and must verify too.
+  database.exec(`CREATE TABLE IF NOT EXISTS email_confirmations (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, verified_at TEXT NOT NULL
+  ); CREATE TABLE IF NOT EXISTS email_verifications (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, sent_at INTEGER NOT NULL
+  ); PRAGMA user_version = 2;`);
   connection = database;
   return database;
 }
@@ -61,17 +68,22 @@ export function transaction<T>(fn: () => T): T {
   try { const value = fn(); database.exec("COMMIT"); return value; }
   catch (error) { database.exec("ROLLBACK"); throw error; }
 }
-export type UserRow = { id: string; email: string; name: string; password_hash: string };
+export type UserRow = { id: string; email: string; name: string; password_hash: string; email_verified_at: string|null };
+export function requireVerifiedEmail(userId:string) {
+  const user=db().prepare("SELECT v.verified_at email_verified_at FROM users u LEFT JOIN email_confirmations v ON v.user_id=u.id WHERE u.id=?").get(userId);
+  if(!user)throw new AppError(401,"Please sign in to continue.");
+  if(!user.email_verified_at)throw new AppError(403,"Verify your email address to use AI. Your projects and manual task editing are still available.");
+}
 export function userByEmail(email: string) {
-  return db().prepare("SELECT * FROM users WHERE email=?").get(email) as UserRow | undefined;
+  return db().prepare("SELECT u.*,v.verified_at email_verified_at FROM users u LEFT JOIN email_confirmations v ON v.user_id=u.id WHERE u.email=?").get(email) as UserRow | undefined;
 }
 export function createUser(email: string, name: string, passwordHash: string) {
   return transaction(() => {
     if (userByEmail(email)) throw new AppError(409, "An account with this email already exists. Please sign in.");
     const id = randomUUID(), now = new Date().toISOString();
-    db().prepare("INSERT INTO users VALUES(?,?,?,?,?)").run(id, email, name, passwordHash, now);
+    db().prepare("INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)").run(id, email, name, passwordHash, now);
     db().prepare("INSERT INTO projects(id,user_id,name,is_inbox,created_at) VALUES(?,?,?,1,?)").run(randomUUID(), id, "Inbox", now);
-    return { id, email, name };
+    return { id, email, name, emailVerified:false };
   });
 }
 export function listProjects(userId: string): Project[] {
@@ -175,13 +187,20 @@ export function sortTasks(userId: string,projectId: string,order:string[],snapsh
   });
 }
 export function takeRateLimit(key:string,limit:number,windowMs:number) {
-  return transaction(()=>{
+  return takeRateLimits([{key,limit,windowMs}]);
+}
+export function takeRateLimits(limits:{key:string;limit:number;windowMs:number}[]) {
+  return transaction(()=>consumeRateLimits(limits));
+}
+// Used inside other transactions so sending/reserving quotas is atomic.
+export function consumeRateLimits(limits:{key:string;limit:number;windowMs:number}[]) {
     const now=Date.now();
     db().prepare("DELETE FROM rate_limits WHERE resets_at<?").run(now);
-    const row=db().prepare("SELECT * FROM rate_limits WHERE key=?").get(key);
-    if (row && Number(row.count)>=limit) throw new AppError(429,"Too many requests. Please try again shortly.",Math.max(1,Math.ceil((Number(row.resets_at)-now)/1000)));
-    db().prepare(`INSERT INTO rate_limits(key,count,resets_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1`).run(key,now+windowMs);
-  });
+    for(const {key,limit,windowMs} of limits){
+      const row=db().prepare("SELECT * FROM rate_limits WHERE key=?").get(key);
+      if (row && Number(row.count)>=limit) throw new AppError(429,key==="ai-global-day"?"Today's shared AI allowance has been reached. Manual task editing still works. Please try again later.":"Too many requests. Please try again shortly.",Math.max(1,Math.ceil((Number(row.resets_at)-now)/1000)));
+      db().prepare(`INSERT INTO rate_limits(key,count,resets_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1`).run(key,now+windowMs);
+    }
 }
 export function acquireAiJob(userId:string,resource:string) {
   const token=randomUUID();

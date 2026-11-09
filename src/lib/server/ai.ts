@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AiAction, Todo } from "../types.ts";
 import { AppError } from "./errors.ts";
-import { acquireAiJob, takeRateLimit, requireTask, updateTask, requireProject, listTasks, sortTasks } from "./store.ts";
+import { acquireAiJob, takeRateLimits, requireVerifiedEmail, requireTask, updateTask, requireProject, listTasks, sortTasks } from "./store.ts";
 import { planSchema } from "./validation.ts";
 
 function config() {
@@ -54,10 +54,16 @@ export async function modelJson<T>(schema:z.ZodType<T>,instruction:string,data:u
   }
 }
 async function job<T>(userId:string,resource:string,fn:()=>Promise<T>) {
-  takeRateLimit("ai-minute:"+userId,20,60000);
-  takeRateLimit("ai-day:"+userId,200,24*60*60*1000);
+  requireVerifiedEmail(userId);
   const release=acquireAiJob(userId,resource);
-  try{return await fn();}finally{release();}
+  try{
+    takeRateLimits([
+      {key:"ai-minute:"+userId,limit:10,windowMs:60000},
+      {key:"ai-day:"+userId,limit:30,windowMs:24*60*60*1000},
+      {key:"ai-global-day",limit:200,windowMs:24*60*60*1000},
+    ]);
+    return await fn();
+  }finally{release();}
 }
 const description=z.object({description:z.string().trim().min(1).max(2000)});
 const estimate=z.object({estimatedMinutes:z.number().int().min(1).max(10080)});
@@ -84,6 +90,7 @@ export async function assistTask(userId:string,id:string,action:AiAction,signal?
   });
 }
 export async function sortProject(userId:string,projectId:string,signal?:AbortSignal) {
+  requireVerifiedEmail(userId);
   const project=requireProject(userId,projectId),tasks=listTasks(userId,projectId);
   if(tasks.length<2)return {tasks,reason:"Add a second task before sorting."};
   if(tasks.length>100)throw new AppError(400,"AI sorting supports up to 100 tasks at a time. Use the priority or due-date sort for larger projects.");

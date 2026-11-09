@@ -97,6 +97,7 @@ Environment=HOSTNAME=127.0.0.1
 Environment=APP_URL=https://smart-todolist.giorgi.app
 Environment=DATABASE_PATH=$state/workspace.sqlite
 Environment=AI_CONFIG_FILE=$config
+Environment=EMAIL_CONFIG_FILE=/etc/smart-todolist/email.json
 Environment=NEXT_TELEMETRY_DISABLED=1
 UMask=0077
 Restart=on-failure

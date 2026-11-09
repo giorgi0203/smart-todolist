@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Run on the droplet with database access; remove only this run's test accounts."""
 import json
+import hashlib
+import secrets
+import datetime
 import sqlite3
 import time
 import urllib.error
@@ -36,8 +39,18 @@ class Client:
         email = 'workspace-check-' + uuid.uuid4().hex + '@example.invalid'
         emails.append(email)
         password = uuid.uuid4().hex + '-check'
-        _, flags = self.call('/api/auth/register', 'POST',
-                             {'name': 'Workspace check', 'email': email, 'password': password}, 201)
+        # Fixtures avoid sending real verification emails to nonexistent recipients.
+        self.user_id = str(uuid.uuid4())
+        salt = secrets.token_hex(16)
+        derived = hashlib.scrypt(password.encode(),salt=salt.encode(),n=32768,r=8,p=1,maxmem=64*1024*1024,dklen=64).hex()
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with sqlite3.connect('/var/lib/smart-todolist/workspace.sqlite') as database:
+            database.execute('PRAGMA foreign_keys=ON')
+            database.execute('INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)',
+                             (self.user_id,email,'Workspace check','scrypt$'+salt+'$'+derived,now))
+            database.execute('INSERT INTO projects(id,user_id,name,is_inbox,created_at) VALUES(?,?,?,1,?)',
+                             (str(uuid.uuid4()),self.user_id,'Inbox',now))
+        _, flags = self.call('/api/auth/login','POST',{'email':email,'password':password})
         assert all(x in flags.lower() for x in ['secure', 'httponly', 'samesite=lax'])
         return email, password
 
@@ -52,6 +65,24 @@ try:
                       {'tasks': [{'title': 'Write and test a small website contact form', 'priority': 'high'}]}, 201)[0]['tasks'][0]
     bob.call(path + '/tasks', expected=404)
     bob.call('/api/tasks/' + task['id'], 'PATCH', {'version': task['version'], 'title': 'Not mine'}, 404)
+    for action in ['describe','estimate','split','enrich']:
+        alice.call('/api/tasks/'+task['id']+'/assist','POST',{'action':action},403)
+    alice.call(path+'/assistant','POST',{'message':'Must not reach AI while unverified'},403)
+    alice.call(path+'/sort','POST',{'mode':'ai'},403)
+    alice.call('/api/auth/register','POST',{'name':'Bot','email':'honeypot@example.invalid','password':'a-long-test-password','website':'spam.invalid'},400)
+    assert alice.call('/api/workspace')[0]['user']['emailVerified'] is False
+    token = secrets.token_hex(32)
+    with sqlite3.connect('/var/lib/smart-todolist/workspace.sqlite') as database:
+        database.execute('PRAGMA foreign_keys=ON')
+        database.execute('INSERT INTO email_verifications VALUES(?,?,?,?)',
+                         (alice.user_id,hashlib.sha256(token.encode()).hexdigest(),int(time.time()*1000)+3600000,int(time.time()*1000)))
+    with urllib.request.urlopen(BASE+'/verify-email',timeout=15) as response:assert response.status==200
+    assert alice.call('/api/workspace')[0]['user']['emailVerified'] is False
+    bob.call('/api/auth/verify-email','POST',{'token':token})
+    alice.call('/api/auth/verify-email','POST',{'token':token},400)
+    assert alice.call('/api/workspace')[0]['user']['emailVerified'] is True
+    assert bob.call('/api/workspace')[0]['user']['emailVerified'] is False
+    print('PASS live unverified AI blocking, explicit single-use verification and correct account binding')
     for action in ['describe', 'estimate', 'split']:
         started = time.monotonic()
         task = alice.call('/api/tasks/' + task['id'] + '/assist', 'POST', {'action': action})[0]['task']

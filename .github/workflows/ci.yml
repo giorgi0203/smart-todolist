@@ -1,7 +1,7 @@
 name: Workspace checks
 on:
   push:
-    branches: [main, codex/projects-auth]
+    branches: [main, codex/projects-auth, codex/email-verification]
     paths-ignore: ['**.md']
   pull_request:
 permissions:

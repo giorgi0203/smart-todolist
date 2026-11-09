@@ -13,6 +13,18 @@ const task=(await alice.request(`/api/projects/${project.id}/tasks`,'POST',{task
 assert.equal((await bob.request(`/api/projects/${project.id}/tasks`)).status,404);assert.equal((await bob.request(`/api/tasks/${task.id}`,'PATCH',{version:1,title:'Not mine'})).status,404);assert.equal((await bob.request(`/api/projects/${project.id}`,'DELETE')).status,404);
 let updated=(await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:task.version,description:'Written by me'})).data.task;assert.equal(updated.description,'Written by me');
 assert.equal((await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:1,title:'Late edit'})).status,409);
+assert.equal(registered.data.user.emailVerified,false);
+for(const action of ['describe','estimate','split','enrich'])assert.equal((await alice.request(`/api/tasks/${task.id}/assist`,'POST',{action})).status,403);
+assert.equal((await alice.request(`/api/projects/${project.id}/assistant`,'POST',{message:'Should be blocked before verification'})).status,403);
+assert.equal((await alice.request(`/api/projects/${project.id}/sort`,'POST',{mode:'ai'})).status,403);
+assert.equal((await alice.request('/api/auth/send-verification','POST',{})).status,429);
+const messages=await(await fetch((process.env.TEST_MAIL_URL||'http://127.0.0.1:4111')+'/messages?email='+encodeURIComponent(`alice-${suffix}@example.invalid`))).json();
+assert.equal(messages.length,1);const link=new URL(messages[0].text.match(/https?:\/\/[^\s]+/)[0]),token=new URLSearchParams(link.hash.slice(1)).get('token');assert.ok(token);
+assert.equal((await fetch(base+link.pathname)).status,200);assert.equal((await alice.request('/api/workspace')).data.user.emailVerified,false);
+assert.equal((await alice.request('/api/auth/verify-email','POST',{token},'https://untrusted.invalid')).status,403);
+assert.equal((await bob.request('/api/auth/verify-email','POST',{token})).status,200);
+assert.equal((await bob.request('/api/workspace')).data.user.emailVerified,false);assert.equal((await alice.request('/api/workspace')).data.user.emailVerified,true);
+assert.equal((await alice.request('/api/auth/verify-email','POST',{token})).status,400);
 const before=Date.now();const ai=await alice.request(`/api/tasks/${task.id}/assist`,'POST',{action:'estimate'});assert.equal(ai.status,200);assert.equal(ai.data.task.estimatedMinutes,45);assert.equal(ai.data.task.description,'Written by me');assert.ok(Date.now()-before<5000);
 updated=ai.data.task;const pending=alice.request(`/api/tasks/${task.id}/assist`,'POST',{action:'describe'});await new Promise(r=>setTimeout(r,150));const edit=await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:updated.version,title:'My newer title'});assert.equal(edit.status,200);assert.equal((await pending).status,409);
 const plan=await alice.request(`/api/projects/${project.id}/assistant`,'POST',{message:'Plan the next useful steps for a small launch'});assert.equal(plan.status,200);assert.equal((await alice.request(`/api/projects/${project.id}/tasks`)).data.tasks.length,1);

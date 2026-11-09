@@ -35,7 +35,7 @@ const provider=createServer(async(req,res)=>{
 before(async()=>{provider.listen(0,"127.0.0.1");await once(provider,"listening");process.env.AI_BASE_URL=`http://127.0.0.1:${(provider.address() as {port:number}).port}`;});
 after(()=>{provider.closeAllConnections();provider.close();db().close();rmSync(directory,{recursive:true,force:true});});
 const status=(code:number)=>(e:unknown)=>e instanceof AppError&&e.status===code;
-function account(suffix:string){return createUser(`${suffix}@example.invalid`,suffix,"not-a-login-hash");}
+function account(suffix:string){const user=createUser(`${suffix}@example.invalid`,suffix,"not-a-login-hash");db().prepare("INSERT INTO email_confirmations VALUES(?,?)").run(user.id,new Date().toISOString());return {...user,emailVerified:true};}
 
 test("passwords use independent salts and reject incorrect passwords",async()=>{
  const first=await hashPassword("a long test password"),second=await hashPassword("a long test password");assert.notEqual(first,second);assert.ok(!first.includes("a long"));assert.equal(await verifyPassword("a long test password",first),true);assert.equal(await verifyPassword("wrong",first),false);assert.equal(await verifyPassword("wrong","malformed"),false);

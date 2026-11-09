@@ -1,7 +1,7 @@
 import { z } from "zod";
 const text=(max:number)=>z.string().trim().min(1,"Please enter a value.").max(max,`Use ${max} characters or fewer.`);
 export const email=z.string().trim().email("Enter a valid email address.").max(254).transform(v=>v.toLowerCase());
-export const registerSchema=z.object({email,name:text(80),password:z.string().min(12,"Use at least 12 characters for your password.").max(128,"Password is too long.")}).strict();
+export const registerSchema=z.object({email,name:text(80),password:z.string().min(12,"Use at least 12 characters for your password.").max(128,"Password is too long."),website:z.string().max(0,"Registration could not be completed.").optional()}).strict();
 export const loginSchema=z.object({email,password:z.string().min(1).max(128)}).strict();
 export const priority=z.enum(["low","medium","high"]);
 export const dueDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"Choose a valid date.").refine(v=>Number.isFinite(new Date(v).getTime()) && new Date(v).toISOString().slice(0,10)===v,"Choose a valid date.").nullable();

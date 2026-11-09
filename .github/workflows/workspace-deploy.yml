@@ -1,0 +1,38 @@
+name: Smart workspace deployment
+on:
+  push:
+    branches: [codex/projects-auth]
+    paths: ['.github/workflows/workspace-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            ip -4 -o addr show | grep '138.68.64.163/' >/dev/null
+            node --version
+            systemctl is-active smart-todolist-web smart-todolist-agent
+            systemctl show smart-todolist-web -p User -p WorkingDirectory -p ExecStart
+            python3 - <<'PY'
+            import json,pathlib,urllib.request,urllib.error,time
+            p=pathlib.Path('/var/www/smart-todolist/current/agent/appsettings.Production.json')
+            cfg=json.loads(p.read_text());token=cfg.get('GitHubToken','')
+            print('Existing AI token configured:',bool(token))
+            if token:
+              for endpoint,model in [('https://models.inference.ai.azure.com/chat/completions','gpt-4o-mini'),('https://models.github.ai/inference/chat/completions','openai/gpt-4.1-mini')]:
+                start=time.monotonic();req=urllib.request.Request(endpoint,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'},data=json.dumps({'model':model,'messages':[{'role':'user','content':'Reply with the single word ready.'}],'max_tokens':8}).encode())
+                try:
+                  with urllib.request.urlopen(req,timeout=20) as r:result=json.load(r);print('AI probe',model,'HTTP',r.status,'seconds',round(time.monotonic()-start,2),'has_reply',bool(result.get('choices')))
+                except urllib.error.HTTPError as e:print('AI probe',model,'HTTP',e.code,'seconds',round(time.monotonic()-start,2))
+                except Exception as e:print('AI probe',model,type(e).__name__,'seconds',round(time.monotonic()-start,2))
+            PY

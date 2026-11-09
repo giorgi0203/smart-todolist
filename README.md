@@ -1,205 +1,54 @@
-# Smart TodoList (Next.js + CopilotKit + Microsoft Agent Framework)
+# Smart Todo workspace
 
-Smart TodoList is an AI-assisted task manager with two runtimes:
+A private, saved workspace for projects and tasks at https://smart-todolist.giorgi.app.
 
-- A Next.js web app for the UI and CopilotKit chat experience.
-- A .NET agent backend that manages todo state and uses an AI model to enrich tasks.
+- Register/sign in with email and password. Sessions use HttpOnly cookies; passwords use salted scrypt hashes.
+- Create projects, move tasks, set priorities/due dates/estimates, and track subtasks.
+- Save tasks immediately. Request AI descriptions, estimates or breakdowns separately, with progress and retry.
+- Preview a project plan before accepting its tasks, sort tasks, fill missing details, and export a project as JSON.
 
-The assistant can help users:
+## Develop
 
-- Add and manage tasks.
-- Generate practical task descriptions.
-- Estimate task duration in minutes.
-- Split tasks into actionable subtasks.
-- Sort tasks intelligently by priority/content.
+Use Node **24.22.1** and pnpm **11.25.0**:
 
-## Tech Stack
-
-- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4
-- AI UI/runtime bridge: CopilotKit
-- Agent backend: ASP.NET Core (.NET 10) + Microsoft Agent Framework (AG-UI)
-- Model client: OpenAI client against GitHub Models endpoint
-
-## How It Works
-
-1. The web app mounts CopilotKit with agent name my_agent.
-2. The Next.js API route at /api/copilotkit forwards chat/runtime traffic to the local agent endpoint at http://localhost:8000/.
-3. The .NET agent receives the current todo state, runs tools (get/add/update/delete/toggle/set), persists todos to a JSON file, then returns:
-	- Updated state as JSON
-	- A short user-facing summary of what changed
-
-## Project Structure
-
-- src/app: Next.js App Router pages and API endpoints
-- src/components: Todo UI components
-- src/lib/types.ts: Shared frontend state types
-- agent: .NET agent backend and tool logic
-- scripts: Local helper scripts for setup and agent run
-- deploy: Server bootstrap script, nginx config, and systemd unit templates
-- .github/workflows/deploy.yml: CI/CD pipeline for build and deploy
-
-## Prerequisites
-
-- Node.js 20+
-- pnpm 9+ (recommended, lockfile is pnpm)
-- .NET SDK 10.0+
-- A GitHub token with access to GitHub Models (used by the agent as GitHubToken)
-
-## Local Development
-
-### 1) Install dependencies
-
-With pnpm (recommended):
-
-```bash
-pnpm install
-```
-
-With npm:
-
-```bash
-npm install
-```
-
-Note: postinstall runs scripts/setup-agent.bat on Windows by default. On Linux/macOS, use scripts/setup-agent.sh if needed.
-
-### 2) Configure agent secret
-
-From the repository root:
-
-```bash
-cd agent
-dotnet user-secrets set GitHubToken "<your-github-token>"
-```
-
-This value is required. If missing, the agent exits at startup.
-
-### 3) Run the app
-
-From the repository root:
-
-```bash
+```sh
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-This starts both:
+Manual features work without a key. For OpenAI, set server-only `AI_API_KEY` and optionally `AI_MODEL` (default `gpt-4.1-mini`). Never prefix these variables with `NEXT_PUBLIC_`, commit `.env` files, or put keys in chat. `AI_BASE_URL` defaults to `https://api.openai.com/v1` and can point to a compatible local test provider.
 
-- Next.js UI on http://localhost:3000
-- .NET agent on http://localhost:8000
+`APP_URL` is the exact browser origin for request-origin validation and secure cookies. It defaults to `http://localhost:3000` in development; set it explicitly in production. `DATABASE_PATH` defaults to `.data/workspace.sqlite`. Production stores it outside releases at `/var/lib/smart-todolist/workspace.sqlite`.
 
-Alternative scripts:
+## Verify
 
-- pnpm dev:ui (UI only)
-- pnpm dev:agent (agent only)
-- pnpm dev:debug (same as dev with debug log level)
-
-## Build and Run (Production Mode)
-
-Build web app:
-
-```bash
-pnpm build
-```
-
-Run web app:
-
-```bash
-pnpm start
-```
-
-Publish .NET agent:
-
-```bash
-dotnet publish agent/ProverbsAgent.csproj -c Release -o agent-publish
-```
-
-## Agent Tools (Backend Capabilities)
-
-The .NET agent exposes these operations to the model:
-
-- get_todos
-- add_todo
-- update_todo
-- delete_todo
-- toggle_todo
-- toggle_subtask
-- set_todos (bulk replace, used for sorting/reordering)
-
-Todos are persisted to a todos.json file in the agent runtime directory.
-
-## Deployment Overview
-
-CI/CD is defined in .github/workflows/deploy.yml.
-
-Build job:
-
-- Installs dependencies with pnpm
-- Runs lint and build
-- Packages Next.js standalone artifacts
-- Publishes .NET agent
-- Uploads artifacts
-
-Deploy job (on push to main):
-
-- Downloads build artifacts
-- Copies files to your server
-- Writes agent appsettings.Production.json with GitHub token secret
-- Restarts systemd services for web and agent
-- Reloads nginx
-
-## One-Time Server Setup (Ubuntu)
-
-Use deploy/setup-server.sh on a fresh server. It installs Node.js, ASP.NET runtime, nginx, certbot, creates app directories, and installs systemd services.
-
-Example:
-
-```bash
-ssh root@your-droplet 'bash -s' < deploy/setup-server.sh
-```
-
-Before using it, update the DOMAIN value inside deploy/setup-server.sh.
-
-## Required GitHub Secrets (for deploy workflow)
-
-- DROPLET_HOST
-- DROPLET_USERNAME
-- DROPLET_SSH_KEY
-- DROPLET_SSH_PASSPHRASE (if your key is passphrase-protected)
-- AGENT_GITHUB_TOKEN
-
-AGENT_GITHUB_TOKEN is written to appsettings.Production.json on deploy as GitHubToken.
-
-## Troubleshooting
-
-Agent fails at startup with token error:
-
-- Ensure GitHubToken is set via dotnet user-secrets locally, or AGENT_GITHUB_TOKEN in CI.
-
-UI loads but assistant actions do nothing:
-
-- Confirm agent is running at http://localhost:8000.
-- Confirm Next.js API route /api/copilotkit is reachable.
-
-Port conflicts:
-
-- UI expects port 3000.
-- Agent expects port 8000 (from agent launch profile).
-
-## Useful Commands
-
-```bash
+```sh
 pnpm lint
+pnpm exec tsc --noEmit
+pnpm test
 pnpm build
-pnpm dev
-pnpm dev:ui
-pnpm dev:agent
 ```
 
-```bash
-cd agent
-dotnet run --launch-profile http
+`tests/core.test.ts` covers ownership, passwords, persistence, concurrent edits, provider failures/timeouts, and planning. For HTTP/browser checks, start `node tests/mock-provider.mjs`, then the built app with:
+
+```sh
+APP_URL=http://127.0.0.1:3100 DATABASE_PATH=/tmp/smart-test.sqlite AI_API_KEY=test-only AI_BASE_URL=http://127.0.0.1:4110 pnpm start --hostname 127.0.0.1 --port 3100
+node tests/integration.mjs
+node tests/browser.mjs
 ```
 
-## License
+Browser tests use `/usr/bin/chromium` or `CHROMIUM_PATH`. The mock provider is only a test fixture.
 
-See LICENSE.
+## Production deployment
+
+The droplet has 1 GB RAM, so build elsewhere. Package `.next/standalone`, `.next/static` and `public`, plus `deploy/install-workspace.sh`. Only deploy a tested artifact pinned to an immutable Git commit and SHA256 checksum.
+
+The deployment workflow is `.github/workflows/smart-workspace-deploy.yml` in `giorgi0203/portfolio`, where the working droplet SSH secrets live. `SMART_TODO_AI_KEY` holds the OpenAI key. The installer accepts it through the environment, writes `/etc/smart-todolist/ai.json` with root:www-data permissions, then unsets it. No key goes into public artifacts. A private Node 24 runtime leaves other applications' Node installation unchanged.
+
+The installer backs up SQLite, legacy shared data and previous configuration, updates a systemd override, and restores the previous web service if health checks fail. Old .NET agent files/data stay preserved. The new app never exposes its shared task list, and does not assign legacy tasks to a new user because their ownership is unknown.
+
+SQLite uses WAL, transactions, owner-scoped queries and task versions to reject stale AI/edit results. Only the service account should access its database directory. Use SQLite's backup API for a live WAL database and keep off-droplet backup copies separately.
+
+AI calls have a 25-second limit and per-user concurrency/daily/minute limits. OpenAI API billing is separate from ChatGPT; configure a project budget and usage alerts in OpenAI. Email verification, password recovery and social sign-in are not implemented.
+
+`agent/`, older `scripts/`, and `deploy/setup-server.sh` are historical. Do not run the legacy installer against the new workspace.

@@ -1,130 +1,25 @@
-import { Todo } from "@/lib/types";
-
-interface TodoItemProps {
-  todo: Todo;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-  onToggleSubtask: (todoId: string, subtaskId: string) => void;
-  onAction: (action: string, todo: Todo) => void;
-}
-
-export function TodoItem({
-  todo,
-  onToggle,
-  onDelete,
-  onToggleSubtask,
-  onAction,
-}: TodoItemProps) {
-  return (
-    <div className="group border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all bg-white">
-      <div className="flex items-start gap-3">
-        {/* Checkbox */}
-        <button
-          onClick={() => onToggle(todo.id)}
-          className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-            todo.completed
-              ? "bg-emerald-500 border-emerald-500 text-white"
-              : "border-gray-300 hover:border-emerald-400"
-          }`}
-        >
-          {todo.completed && (
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </button>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-medium ${todo.completed ? "line-through text-gray-400" : "text-gray-900"}`}>
-            {todo.title}
-          </h3>
-
-          {todo.description && (
-            <p className="text-sm text-gray-500 mt-1">{todo.description}</p>
-          )}
-
-          {/* Meta row */}
-          {(todo.estimatedMinutes || todo.subtasks.length > 0) && (
-            <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-              {todo.estimatedMinutes && (
-                <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
-                  </svg>
-                  ~{todo.estimatedMinutes}min
-                </span>
-              )}
-              {todo.subtasks.length > 0 && (
-                <span>
-                  {todo.subtasks.filter((s) => s.completed).length}/{todo.subtasks.length} subtasks
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Subtasks */}
-          {todo.subtasks.length > 0 && (
-            <div className="mt-3 space-y-1.5 pl-1">
-              {todo.subtasks.map((subtask) => (
-                <div key={subtask.id} className="flex items-center gap-2">
-                  <button
-                    onClick={() => onToggleSubtask(todo.id, subtask.id)}
-                    className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                      subtask.completed
-                        ? "bg-emerald-400 border-emerald-400 text-white"
-                        : "border-gray-300 hover:border-emerald-300"
-                    }`}
-                  >
-                    {subtask.completed && (
-                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                  <span className={`text-sm ${subtask.completed ? "line-through text-gray-400" : "text-gray-600"}`}>
-                    {subtask.title}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-1.5 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            {!todo.description && (
-              <ActionButton label="Describe" onClick={() => onAction("describe", todo)} />
-            )}
-            {!todo.estimatedMinutes && (
-              <ActionButton label="Estimate" onClick={() => onAction("estimate", todo)} />
-            )}
-            {todo.subtasks.length === 0 && (
-              <ActionButton label="Split" onClick={() => onAction("split", todo)} />
-            )}
-          </div>
-        </div>
-
-        {/* Delete */}
-        <button
-          onClick={() => onDelete(todo.id)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 p-1"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="text-xs px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-    >
-      {label}
-    </button>
-  );
+"use client";
+import { useEffect,useState } from "react";
+import type { Todo,Project,Priority,AiAction } from "@/lib/types";
+import { Icon,Spinner } from "./icons";
+export type BusyAction={action:AiAction;startedAt:number};
+export type TodoChanges=Partial<Pick<Todo,"title"|"description"|"priority"|"dueDate"|"estimatedMinutes"|"completed"|"projectId"|"subtasks">>;
+export function TodoItem({todo,projects,saving,busy,error,onSave,onDelete,onAi,onCancel,onRetry}:{todo:Todo;projects:Project[];saving:boolean;busy?:BusyAction;error?:{message:string;action?:AiAction};onSave:(task:Todo,changes:TodoChanges)=>Promise<boolean>;onDelete:(task:Todo)=>Promise<void>;onAi:(task:Todo,action:AiAction)=>Promise<boolean>;onCancel:(id:string)=>void;onRetry:()=>void}){
+ const [editing,setEditing]=useState(false),[draft,setDraft]=useState({title:todo.title,description:todo.description,priority:todo.priority,dueDate:todo.dueDate || "",estimate:todo.estimatedMinutes?.toString() || "",projectId:todo.projectId}),[subTitle,setSubTitle]=useState(""),[clock,setClock]=useState(()=>Date.now());
+ useEffect(()=>{if(!busy)return;const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer);},[busy]);
+ const elapsed=busy?Math.max(0,Math.floor((clock-busy.startedAt)/1000)):0;
+ const labels:Record<AiAction,string>={describe:"Writing a description",estimate:"Estimating focused time",split:"Breaking it into steps",enrich:"Planning missing details"};
+ function edit(){setDraft({title:todo.title,description:todo.description,priority:todo.priority,dueDate:todo.dueDate || "",estimate:todo.estimatedMinutes?.toString() || "",projectId:todo.projectId});setEditing(true);}
+ async function save(event:React.FormEvent){event.preventDefault();const okay=await onSave(todo,{title:draft.title,description:draft.description,priority:draft.priority,dueDate:draft.dueDate || null,estimatedMinutes:draft.estimate?Number(draft.estimate):null,projectId:draft.projectId});if(okay)setEditing(false);}
+ async function addSubtask(event:React.FormEvent){event.preventDefault();if(!subTitle.trim())return;const okay=await onSave(todo,{subtasks:[...todo.subtasks,{id:crypto.randomUUID(),title:subTitle.trim(),completed:false}]});if(okay)setSubTitle("");}
+ function run(action:AiAction){if(action==="split"&&todo.subtasks.length&&!window.confirm("Replace the current subtasks with a new AI breakdown? Their completion progress will be reset."))return;void onAi(todo,action);}
+ return <article className={`task-card ${todo.completed?"task-completed":""}`} aria-label={`Task: ${todo.title}`} aria-busy={saving||!!busy}>
+ <div className="task-heading"><label className="task-check"><input type="checkbox" checked={todo.completed} disabled={saving} onChange={()=>void onSave(todo,{completed:!todo.completed})} aria-label={`Complete ${todo.title}`}/><span><Icon name="check" size={13}/></span></label><div className="task-title"><h3>{todo.title}</h3><div className="task-meta"><span className={`priority ${todo.priority}`}>{todo.priority}</span>{todo.dueDate&&<span className="due-date">Due {new Date(todo.dueDate+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span>}{todo.estimatedMinutes&&<span><Icon name="clock" size={12}/>{todo.estimatedMinutes} min</span>}{todo.subtasks.length>0&&<span>{todo.subtasks.filter(s=>s.completed).length}/{todo.subtasks.length} steps</span>}{saving&&<span className="saving-label"><Spinner/>Saving…</span>}</div></div><button type="button" className="icon-button" onClick={edit} aria-label={`Edit ${todo.title}`} disabled={saving}><Icon name="edit" size={16}/></button><button type="button" className="icon-button danger" onClick={()=>{if(window.confirm(`Delete “${todo.title}”?`))void onDelete(todo);}} aria-label={`Delete ${todo.title}`} disabled={saving}><Icon name="trash" size={16}/></button></div>
+ {todo.description&&<p className="task-description">{todo.description}</p>}
+ {todo.subtasks.length>0&&<div className="subtask-list">{todo.subtasks.map(sub=><label key={sub.id} className={sub.completed?"subtask done":"subtask"}><input type="checkbox" checked={sub.completed} disabled={saving} onChange={()=>void onSave(todo,{subtasks:todo.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})} aria-label={`Complete subtask ${sub.title}`}/><span>{sub.title}</span></label>)}</div>}
+ {editing&&<form onSubmit={save} className="task-editor"><label>Task title<input required maxLength={200} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label><label>Description<textarea maxLength={5000} rows={3} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></label><div className="editor-row"><label>Priority<select aria-label="Priority" value={draft.priority} onChange={e=>setDraft({...draft,priority:e.target.value as Priority})}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><label>Due date<input type="date" value={draft.dueDate} onChange={e=>setDraft({...draft,dueDate:e.target.value})}/></label><label>Minutes<input type="number" min={1} max={10080} value={draft.estimate} onChange={e=>setDraft({...draft,estimate:e.target.value})}/></label></div><label>Project<select aria-label="Project" value={draft.projectId} onChange={e=>setDraft({...draft,projectId:e.target.value})}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><div className="editor-actions"><button className="button primary" disabled={saving} type="submit">{saving?<Spinner/>:null}Save changes</button><button className="button quiet" type="button" onClick={()=>setEditing(false)} disabled={saving}>Cancel</button></div></form>}
+ {busy?<div className="ai-progress" role="status"><Spinner/><div><strong>{labels[busy.action]}… <small>{elapsed}s</small></strong><span>{elapsed>=4?"You can keep working. This request has a 25-second limit.":"Your task is already saved. AI only updates the requested details."}</span></div><button type="button" onClick={()=>onCancel(todo.id)}>Stop waiting</button></div>:<div className="task-actions"><span className="ai-caption"><Icon name="spark" size={13}/>AI help</span><button type="button" onClick={()=>run("describe")} disabled={saving} title="Generate or rewrite the description">Describe</button><button type="button" onClick={()=>run("estimate")} disabled={saving} title="Estimate focused work time">Estimate</button><button type="button" onClick={()=>run("split")} disabled={saving} title="Generate a subtask breakdown">Split</button>{(!todo.description||!todo.estimatedMinutes||!todo.subtasks.length)&&<button type="button" onClick={()=>run("enrich")} disabled={saving}>Fill gaps <Icon name="spark" size={11}/></button>}</div>}
+ {error&&<div className="task-error" role="alert"><span>{error.message}</span>{error.action&&<button type="button" onClick={onRetry} disabled={!!busy}>Retry</button>}</div>}
+ <details className="manual-subtask"><summary>Add a subtask yourself</summary><form onSubmit={addSubtask}><input aria-label={`New subtask for ${todo.title}`} placeholder="A small, actionable step…" maxLength={200} value={subTitle} onChange={e=>setSubTitle(e.target.value)} disabled={saving}/><button type="submit" className="icon-button" disabled={saving||!subTitle.trim()} aria-label="Add subtask"><Icon name="plus" size={16}/></button></form></details>
+ </article>;
 }

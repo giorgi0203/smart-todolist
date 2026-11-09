@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+const base=process.env.TEST_URL||'http://127.0.0.1:3100',suffix=randomUUID().slice(0,8),password='Correct-horse-'+randomUUID();
+function client(){let cookie='';return {async request(path,method='GET',body,origin=base){const headers={'Content-Type':'application/json'};if(cookie)headers.Cookie=cookie;if(method!=='GET'&&origin)headers.Origin=origin;const response=await fetch(base+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});const set=response.headers.get('set-cookie');if(set)cookie=set.split(';')[0];return {status:response.status,data:await response.json(),cookieFlags:set};}};}
+const alice=client(),bob=client(),anon=client();
+assert.equal((await anon.request('/api/workspace')).status,401);
+assert.equal((await anon.request('/api/auth/register','POST',{email:'bad',name:'A',password:'short'})).status,400);
+assert.equal((await anon.request('/api/auth/register','POST',{email:`csrf-${suffix}@example.invalid`,name:'A',password},'https://untrusted.invalid')).status,403);
+const registered=await alice.request('/api/auth/register','POST',{email:`alice-${suffix}@example.invalid`,name:'Alice Test',password});assert.equal(registered.status,201);assert.ok(registered.cookieFlags.includes('HttpOnly'));assert.ok(registered.cookieFlags.toLowerCase().includes('samesite=lax'));assert.ok(!JSON.stringify(registered.data).includes('password'));
+assert.equal((await bob.request('/api/auth/register','POST',{email:`bob-${suffix}@example.invalid`,name:'Bob Test',password})).status,201);
+const project=(await alice.request('/api/projects','POST',{name:'Website launch',description:'A private project',color:'teal'})).data.project;
+const task=(await alice.request(`/api/projects/${project.id}/tasks`,'POST',{tasks:[{title:'Draft landing page',priority:'high',dueDate:'2027-01-04'}]})).data.tasks[0];assert.ok(task.id);
+assert.equal((await bob.request(`/api/projects/${project.id}/tasks`)).status,404);assert.equal((await bob.request(`/api/tasks/${task.id}`,'PATCH',{version:1,title:'Not mine'})).status,404);assert.equal((await bob.request(`/api/projects/${project.id}`,'DELETE')).status,404);
+let updated=(await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:task.version,description:'Written by me'})).data.task;assert.equal(updated.description,'Written by me');
+assert.equal((await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:1,title:'Late edit'})).status,409);
+const before=Date.now();const ai=await alice.request(`/api/tasks/${task.id}/assist`,'POST',{action:'estimate'});assert.equal(ai.status,200);assert.equal(ai.data.task.estimatedMinutes,45);assert.equal(ai.data.task.description,'Written by me');assert.ok(Date.now()-before<5000);
+updated=ai.data.task;const pending=alice.request(`/api/tasks/${task.id}/assist`,'POST',{action:'describe'});await new Promise(r=>setTimeout(r,150));const edit=await alice.request(`/api/tasks/${task.id}`,'PATCH',{version:updated.version,title:'My newer title'});assert.equal(edit.status,200);assert.equal((await pending).status,409);
+const plan=await alice.request(`/api/projects/${project.id}/assistant`,'POST',{message:'Plan the next useful steps for a small launch'});assert.equal(plan.status,200);assert.equal((await alice.request(`/api/projects/${project.id}/tasks`)).data.tasks.length,1);
+const accepted=await alice.request(`/api/projects/${project.id}/tasks`,'POST',{tasks:plan.data.plan.tasks});assert.equal(accepted.status,201);assert.equal(accepted.data.tasks.length,2);
+const sorted=await alice.request(`/api/projects/${project.id}/sort`,'POST',{mode:'ai'});assert.equal(sorted.status,200);assert.equal(sorted.data.tasks.length,3);
+const inbox=(await alice.request('/api/workspace')).data.projects.find(p=>p.isInbox);let moving=sorted.data.tasks[0];const moved=await alice.request(`/api/tasks/${moving.id}`,'PATCH',{version:moving.version,projectId:inbox.id});assert.equal(moved.status,200);assert.equal(moved.data.task.projectId,inbox.id);
+await alice.request('/api/auth/logout','POST',{});assert.equal((await alice.request('/api/workspace')).status,401);assert.equal((await alice.request('/api/auth/login','POST',{email:`alice-${suffix}@example.invalid`,password:'wrong-password'})).status,401);assert.equal((await alice.request('/api/auth/login','POST',{email:`alice-${suffix}@example.invalid`,password})).status,200);
+const restored=await alice.request(`/api/projects/${project.id}/tasks`);assert.equal(restored.data.tasks.length,2);assert.equal((await bob.request('/api/workspace')).data.projects.length,1);
+assert.equal((await anon.request('/api/copilotkit','POST',{})).status,410);
+console.log('PASS API integration: registration/login/logout, cookies, CSRF, private projects, persistence, task edits/moves, targeted AI, conflict protection, plan preview/acceptance, sorting and closed legacy bridge');

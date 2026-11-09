@@ -1,0 +1,13 @@
+import { z } from "zod";
+const text=(max:number)=>z.string().trim().min(1,"Please enter a value.").max(max,`Use ${max} characters or fewer.`);
+export const email=z.string().trim().email("Enter a valid email address.").max(254).transform(v=>v.toLowerCase());
+export const registerSchema=z.object({email,name:text(80),password:z.string().min(12,"Use at least 12 characters for your password.").max(128,"Password is too long.")}).strict();
+export const loginSchema=z.object({email,password:z.string().min(1).max(128)}).strict();
+export const priority=z.enum(["low","medium","high"]);
+export const dueDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/,"Choose a valid date.").refine(v=>Number.isFinite(new Date(v).getTime()) && new Date(v).toISOString().slice(0,10)===v,"Choose a valid date.").nullable();
+export const projectSchema=z.object({name:text(100),description:z.string().trim().max(1000).optional(),color:z.enum(["indigo","teal","rose","amber","violet"]).optional()}).strict();
+export const newTaskSchema=z.object({title:text(200),description:z.string().trim().max(5000).optional(),priority:priority.optional(),dueDate:dueDate.optional(),estimatedMinutes:z.number().int().min(1).max(10080).nullable().optional(),subtasks:z.array(z.object({title:text(200)}).strict()).max(30).optional()}).strict();
+export const taskPatchSchema=newTaskSchema.partial().extend({version:z.number().int().min(1),completed:z.boolean().optional(),projectId:z.string().uuid().optional(),subtasks:z.array(z.object({id:z.string().uuid(),title:text(200),completed:z.boolean()}).strict()).max(30).optional()}).strict();
+export const aiTaskSchema=z.object({action:z.enum(["describe","estimate","split","enrich"])}).strict();
+export const planTaskSchema=z.object({title:text(200),description:z.string().trim().max(2000),priority,estimatedMinutes:z.number().int().min(1).max(10080).nullable(),subtasks:z.array(z.object({title:text(200)})).max(8)});
+export const planSchema=z.object({reply:z.string().max(1500),tasks:z.array(planTaskSchema).min(1).max(12)});

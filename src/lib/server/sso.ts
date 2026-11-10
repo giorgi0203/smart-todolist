@@ -6,7 +6,7 @@ export const identityUrl=()=>process.env.AUTH_PUBLIC_URL||'https://auth.giorgi.a
 export const digestToken=(v:string)=>createHash('sha256').update(v).digest('hex');
 export const pkce=(v:string)=>createHash('sha256').update(v).digest('base64url');
 export const appCallback=()=>process.env.SSO_CALLBACK_URL||'https://smart-todolist.giorgi.app/api/auth/sso/callback';
-export function identityTables(){db().exec(`CREATE TABLE IF NOT EXISTS identity_sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS sso_codes(code_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,client_id TEXT NOT NULL,redirect_uri TEXT NOT NULL,challenge TEXT NOT NULL,expires_at INTEGER NOT NULL);`);}
+export function identityTables(){db().exec(`CREATE TABLE IF NOT EXISTS identity_sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS sso_login_states(state_hash TEXT PRIMARY KEY,expires_at INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS sso_codes(code_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,client_id TEXT NOT NULL,redirect_uri TEXT NOT NULL,challenge TEXT NOT NULL,expires_at INTEGER NOT NULL);`);}
 export function issueCode(userId:string,client:string,redirect:string,challenge:string){
  if(client!=='smart-todolist'||redirect!==appCallback()||!/^[\w-]{43}$/.test(challenge))throw new AppError(400,'Invalid sign-in request.');
  identityTables();const code=randomBytes(32).toString('hex');db().prepare('DELETE FROM sso_codes WHERE expires_at<?').run(Date.now());db().prepare('INSERT INTO sso_codes VALUES(?,?,?,?,?,?)').run(digestToken(code),userId,client,redirect,challenge,Date.now()+60000);return code;
@@ -22,3 +22,6 @@ export function safeContinue(value:unknown){
  if(value==='https://hls-player.giorgi.app/'||value==='https://smart-todolist.giorgi.app/')return value;
  return '/account';
 }
+
+export function rememberLoginState(state:string){identityTables();db().prepare('DELETE FROM sso_login_states WHERE expires_at<?').run(Date.now());db().prepare('INSERT INTO sso_login_states VALUES(?,?)').run(digestToken(state),Date.now()+600000);}
+export function consumeLoginState(state:string){identityTables();return !!db().prepare('DELETE FROM sso_login_states WHERE state_hash=? AND expires_at>? RETURNING state_hash').get(digestToken(state),Date.now());}

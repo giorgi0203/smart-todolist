@@ -95,6 +95,8 @@ Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
 Environment=APP_URL=https://smart-todolist.giorgi.app
+Environment=AUTH_PUBLIC_URL=https://auth.giorgi.app
+Environment=AUTH_INTERNAL_URL=http://127.0.0.1:3100
 Environment=DATABASE_PATH=$state/workspace.sqlite
 Environment=AI_CONFIG_FILE=$config
 Environment=EMAIL_CONFIG_FILE=/etc/smart-todolist/email.json

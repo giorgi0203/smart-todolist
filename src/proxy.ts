@@ -1,0 +1,2 @@
+import { NextResponse,type NextRequest } from 'next/server';
+export function proxy(req:NextRequest){if(process.env.APP_ROLE!=='identity')return NextResponse.next();const p=req.nextUrl.pathname;if(p.startsWith('/api/auth/sso/'))return new NextResponse('Not found',{status:404});if(['/', '/embed','/account','/analytics','/verify-email','/favicon.ico'].includes(p)||p.startsWith('/_next/')||p.startsWith('/api/auth/')||p.startsWith('/api/sso/')||p==='/api/analytics/event'||p==='/api/health')return NextResponse.next();return new NextResponse('Not found',{status:404});}

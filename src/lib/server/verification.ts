@@ -35,9 +35,9 @@ export async function sendVerification(userId:string,ip:string){
  if(!reserved)return {alreadyVerified:true};
  // Fragment tokens are never sent in URL requests or Referer headers. GET/scanners cannot redeem them.
  const url=new URL("/verify-email",appUrl());url.hash="token="+reserved.token;
- const text="Confirm your email to enable AI in Smart Todo.\n\nOpen this link and press Verify email:\n"+url.toString()+"\n\nThis link expires in 1 hour and works once. A new verification email replaces the previous link. If you did not create this account, ignore this message. Your address will not be verified unless you confirm it.";
+ const text="Confirm your email for your Giorgi account. This unlocks verified features across Giorgi apps.\n\nOpen this link and press Verify email:\n"+url.toString()+"\n\nThis link expires in 1 hour and works once. A new verification email replaces the previous link. If you did not create this account, ignore this message. Your address will not be verified unless you confirm it.";
  try{
-  const response=await fetch(settings.base.replace(/\/$/,"")+"/emails",{method:"POST",redirect:"error",signal:AbortSignal.timeout(Number(process.env.EMAIL_TIMEOUT_MS || 10000)),headers:{Authorization:"Bearer "+settings.key,"Content-Type":"application/json","Idempotency-Key":"verification/"+randomUUID()},body:JSON.stringify({from:settings.from,to:[reserved.email],subject:"Verify your email for Smart Todo",text})});
+  const response=await fetch(settings.base.replace(/\/$/,"")+"/emails",{method:"POST",redirect:"error",signal:AbortSignal.timeout(Number(process.env.EMAIL_TIMEOUT_MS || 10000)),headers:{Authorization:"Bearer "+settings.key,"Content-Type":"application/json","Idempotency-Key":"verification/"+randomUUID()},body:JSON.stringify({from:process.env.EMAIL_FROM || "Giorgi account <noreply@mail.giorgi.app>",to:[reserved.email],subject:"Verify your Giorgi account",text})});
   if(!response.ok)throw new Error("Delivery unavailable");
   const result=await response.json();if(typeof result.id!=="string"||!result.id)throw new Error("Invalid delivery response");
  }catch{

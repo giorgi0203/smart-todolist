@@ -14,6 +14,7 @@ try:
   db.execute('PRAGMA foreign_keys=ON');db.execute('INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)',(identifier,email,'Shared auth check','scrypt$'+salt+'$'+hashlib.scrypt(password.encode(),salt=salt.encode(),n=32768,r=8,p=1,maxmem=64*1024*1024,dklen=64).hex(),now));db.execute('INSERT INTO projects(id,user_id,name,is_inbox,created_at) VALUES(?,?,?,1,?)',(str(uuid.uuid4()),identifier,'Inbox',now));db.execute('INSERT INTO email_confirmations VALUES(?,?)',(identifier,now))
  status,_,headers=call(identity+'/api/auth/login',{'email':email,'password':password});assert status==200,status
  assert '__Host-giorgi_identity=' in headers.get('Set-Cookie','') and 'Domain=' not in headers.get('Set-Cookie','')
+ assert call(identity+'/api/auth/register',{'name':'Bot','email':'honeypot@example.invalid','password':'a-long-test-password','website':'spam.invalid'})[0]==400
  assert call(app+'/api/workspace')[0]==401
  assert call(app+'/api/auth/login',{'email':email,'password':password},origin=app)[0]==410
  assert call(app+'/api/auth/sso/start')[0]==200

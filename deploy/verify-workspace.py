@@ -72,7 +72,7 @@ try:
         alice.call('/api/tasks/'+task['id']+'/assist','POST',{'action':action},403)
     alice.call(path+'/assistant','POST',{'message':'Must not reach AI while unverified'},403)
     alice.call(path+'/sort','POST',{'mode':'ai'},403)
-    alice.call('/api/auth/register','POST',{'name':'Bot','email':'honeypot@example.invalid','password':'a-long-test-password','website':'spam.invalid'},400)
+    alice.call('/api/auth/register','POST',{'name':'Bot','email':'honeypot@example.invalid','password':'a-long-test-password','website':'spam.invalid'},410)
     assert alice.call('/api/workspace')[0]['user']['emailVerified'] is False
     token = secrets.token_hex(32)
     with sqlite3.connect('/var/lib/smart-todolist/workspace.sqlite') as database:

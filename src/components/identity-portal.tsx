@@ -7,6 +7,7 @@ import { api } from '@/lib/client';
 import type { User } from '@/lib/types';
 export function IdentityPortal({initialUser,embedded=false,continuation='/account',parentOrigin='https://giorgi.app'}:{initialUser:User|null;embedded?:boolean;continuation?:string;parentOrigin?:string}){
  const [user,setUser]=useState(initialUser),[message,setMessage]=useState('');
+ useEffect(()=>{if(embedded)window.parent.postMessage({type:'giorgi:ready'},parentOrigin);},[embedded,parentOrigin]);
  useEffect(()=>{if(user&&embedded)window.parent.postMessage({type:'giorgi:authenticated'},parentOrigin);},[user,embedded,parentOrigin]);
  useEffect(()=>{if(!embedded)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')window.parent.postMessage({type:'giorgi:close'},parentOrigin);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[embedded,parentOrigin]);
  function authenticated(value:User,note?:string){setUser(value);if(note)setMessage(note);if(!embedded&&continuation!=='/account')window.location.replace(new URL(continuation,window.location.origin).href);}

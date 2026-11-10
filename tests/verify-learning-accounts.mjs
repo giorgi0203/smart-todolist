@@ -60,7 +60,7 @@ async function authorizeLearning(){
  assert.equal((await request(origins.learning+'/api/sso/token')).status,404);
  assert.equal((await request(origins.identity+'/api/learning/experiments')).status,404);
  assert.equal((await request(origins.workspace+'/api/learning/experiments')).status,404);
- database=new DatabaseSync(dbPath);database.exec('PRAGMA foreign_keys=ON');
+ database=new DatabaseSync(dbPath);database.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
  const salt=randomBytes(16).toString('hex'),hash='scrypt$'+salt+'$'+scryptSync(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}).toString('hex');
  for(const user of [{id,email},{id:otherId,email:'learning-other-'+otherId+'@example.invalid'}])database.prepare('INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)').run(user.id,user.email,'Learning fixture',hash,new Date().toISOString());
  const login=await write('identity','/api/auth/login',{email,password});assert.equal(login.status,200);

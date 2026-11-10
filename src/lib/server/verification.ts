@@ -6,16 +6,16 @@ import { appUrl } from "./settings.ts";
 
 const hash=(value:string)=>createHash("sha256").update(value).digest("hex");
 const hour=60*60*1000;
-function config(){
+export function emailSettings(){
  let file:{apiKey?:string;from?:string;baseUrl?:string}={};
  if(process.env.EMAIL_CONFIG_FILE){try{file=JSON.parse(readFileSync(process.env.EMAIL_CONFIG_FILE,"utf8"));}catch{}}
  const key=process.env.EMAIL_API_KEY || file.apiKey;
  if(!key)throw new AppError(503,"Verification email is temporarily unavailable. Your tasks are saved; please try again later.");
  return {key,from:process.env.EMAIL_FROM || file.from || "Smart Todo <noreply@mail.giorgi.app>",base:process.env.EMAIL_BASE_URL || file.baseUrl || "https://api.resend.com"};
 }
-export function emailConfigured(){try{return !!config().key;}catch{return false;}}
+export function emailConfigured(){try{return !!emailSettings().key;}catch{return false;}}
 export async function sendVerification(userId:string,ip:string){
- const settings=config();
+ const settings=emailSettings();
  const reserved=transaction(()=>{
   const user=db().prepare("SELECT u.email,u.name,v.verified_at email_verified_at FROM users u LEFT JOIN email_confirmations v ON v.user_id=u.id WHERE u.id=?").get(userId);
   if(!user)throw new AppError(401,"Please sign in to continue.");

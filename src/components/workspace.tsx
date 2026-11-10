@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { useCallback,useEffect,useRef,useState } from "react";
 import type { User,Project,Todo,Priority,AiAction,AiPlan } from "@/lib/types";
 import { api,ApiError,errorMessage } from "@/lib/client";
@@ -11,6 +12,7 @@ import { TodoItem,type TodoChanges,type BusyAction } from "./todo-item";
 type TaskError={message:string;action?:AiAction};
 type ProjectInput={name:string;description:string;color:string};
 export function Workspace({initialUser}:{initialUser:User|null}){
+ const router=useRouter();
  const [user,setUser]=useState(initialUser),[projects,setProjects]=useState<Project[]>([]),[projectId,setProjectId]=useState<string|null>(null),[tasks,setTasks]=useState<Todo[]>([]);
  const [workspaceLoading,setWorkspaceLoading]=useState(!!initialUser),[tasksLoading,setTasksLoading]=useState(true),[reload,setReload]=useState(0),[aiAvailable,setAiAvailable]=useState(true),[notice,setNotice]=useState(""),[loadError,setLoadError]=useState("");
  const [newTitle,setNewTitle]=useState(""),[newPriority,setNewPriority]=useState<Priority>("medium"),[newDue,setNewDue]=useState(""),[adding,setAdding]=useState(false),[query,setQuery]=useState(""),[filter,setFilter]=useState<"all"|"open"|"done">("all");
@@ -43,7 +45,7 @@ export function Workspace({initialUser}:{initialUser:User|null}){
  },[projectId,userId,reload,report]);
  useEffect(()=>()=>{controllers.current.forEach(c=>c.abort());},[]);
  function choose(id:string){setSidebarOpen(false);if(selected.current===id)return;selected.current=id;setProjectId(id);setTasks([]);setTasksLoading(true);setPlan(null);setAssistantError("");setQuery("");setFilter("all");setSidebarOpen(false);setLoadError("");}
- function authenticated(value:User,message?:string){if(message)setNotice(message);owner.current=value.id;setWorkspaceLoading(true);setTasksLoading(true);setUser(value);}
+ function authenticated(value:User,message?:string){if(new URLSearchParams(window.location.search).get("next")==="/portfolio-analytics"){router.push("/portfolio-analytics");router.refresh();return;}if(message)setNotice(message);owner.current=value.id;setWorkspaceLoading(true);setTasksLoading(true);setUser(value);}
  function applyTask(task:Todo){setTasks(old=>{if(selected.current!==task.projectId)return old.filter(t=>t.id!==task.id);const found=old.find(t=>t.id===task.id);if(found&&found.version>task.version)return old;return found?old.map(t=>t.id===task.id?task:t):[...old,task];});}
  async function addTask(event:React.FormEvent){event.preventDefault();const title=newTitle.trim(),id=projectId,who=userId;if(!title||!id||!who)return;setAdding(true);setNotice("");try{const data=await api<{tasks:Todo[]}>(`/api/projects/${id}/tasks`,{method:"POST",body:JSON.stringify({tasks:[{title,priority:newPriority,dueDate:newDue || null}]})});if(owner.current!==who)return;if(selected.current===id){data.tasks.forEach(applyTask);setNewTitle("");setNewDue("");}void refreshProjects();}catch(error){report(error);}finally{setAdding(false);}}
  async function saveTask(task:Todo,changes:TodoChanges){const who=userId;const optimistic=changes.completed!==undefined||changes.subtasks!==undefined;if(optimistic)setTasks(old=>old.map(t=>t.id===task.id?{...t,...changes}:t));setSaving(old=>({...old,[task.id]:true}));setTaskErrors(old=>({...old,[task.id]:{message:""}}));try{const data=await api<{task:Todo}>(`/api/tasks/${task.id}`,{method:"PATCH",body:JSON.stringify({...changes,version:task.version})});if(owner.current!==who)return false;applyTask(data.task);void refreshProjects();return true;}catch(error){if(owner.current===who){if(optimistic)setTasks(old=>old.map(t=>t.id===task.id&&t.version===task.version?task:t));setTaskErrors(old=>({...old,[task.id]:{message:errorMessage(error)}}));if(error instanceof ApiError&&error.status===409)setReload(n=>n+1);if(error instanceof ApiError&&error.status===401)clearSession();}return false;}finally{setSaving(old=>({...old,[task.id]:false}));}}

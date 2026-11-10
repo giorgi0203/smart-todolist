@@ -5,10 +5,14 @@ import { db,transaction,consumeRateLimits } from './store.ts';
 import { emailSettings } from './verification.ts';
 import { AppError } from './errors.ts';
 export const contactSchema=z.object({name:z.string().trim().min(1).max(80).regex(/^[^\r\n\x00-\x1f]+$/),email:z.string().trim().email().max(254),message:z.string().trim().min(10,'Please tell me a little more (at least 10 characters).').max(5000),website:z.string().max(0).optional()}).strict();
-export async function sendContact(input:z.infer<typeof contactSchema>,ip:string){
- const settings=emailSettings();let recipient=process.env.CONTACT_EMAIL;
+export function contactOwnerEmail(){
+ let recipient=process.env.CONTACT_EMAIL;
  if(!recipient){try{recipient=JSON.parse(readFileSync(process.env.CONTACT_CONFIG_FILE||'/etc/smart-todolist/contact.json','utf8')).email;}catch{}}
  if(!z.string().email().safeParse(recipient).success)throw new AppError(503,'The contact form is temporarily unavailable. Please reach me through one of my socials.');
+ return recipient!.toLowerCase();
+}
+export async function sendContact(input:z.infer<typeof contactSchema>,ip:string){
+ const settings=emailSettings(),recipient=contactOwnerEmail();
  const id=randomUUID(),fingerprint=createHash('sha256').update(ip).digest('hex');
  transaction(()=>{
   db().exec('CREATE TABLE IF NOT EXISTS contact_messages(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL)');

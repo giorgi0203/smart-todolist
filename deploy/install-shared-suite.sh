@@ -3,6 +3,7 @@ set -euo pipefail
 stage=${1:?stage required}
 source_id=${2:?source SHA required}
 [[ $source_id =~ ^[a-f0-9]{40}$ ]]
+[[ $stage =~ ^/tmp/smart-workspace-[a-f0-9]{40}$ ]]
 base=/var/www/smart-todolist-workspace
 previous=$(readlink "$base/current")
 cp -p /etc/systemd/system/smart-todolist-web.service.d/90-workspace.conf "$stage/previous-workspace.conf"
@@ -14,6 +15,7 @@ restore_suite(){
   cp -p "$stage/previous-workspace.conf" /etc/systemd/system/smart-todolist-web.service.d/90-workspace.conf
   systemctl daemon-reload;systemctl restart smart-todolist-web || true
  fi
+ rm -rf -- "$stage/app" "$stage/bundle.tar.gz" "$stage/node.tar.xz"
  exit "$code"
 }
 trap restore_suite EXIT

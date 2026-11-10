@@ -4,12 +4,12 @@ import { db,transaction,consumeRateLimits } from './store.ts';
 import { contactOwnerEmail } from './contact.ts';
 import { AppError } from './errors.ts';
 import type { User } from '../types.ts';
-const targets=['hls-player.giorgi.app','smart-todolist.giorgi.app','www.facebook.com','www.linkedin.com','github.com','www.instagram.com'] as const;
+const targets=['angular-compiler.giorgi.app','example-mcp.giorgi.app','mcp.giorgi.app','api.giorgi.app','hls-player.giorgi.app','smart-todolist.giorgi.app','www.facebook.com','www.linkedin.com','github.com','www.instagram.com'] as const;
 export const eventSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('pageview'),label:z.literal('home'),referrer:z.string().max(253).optional()}).strict(),
  z.object({kind:z.literal('outbound'),label:z.enum(targets),referrer:z.string().max(253).optional()}).strict(),
 ]);
-export const analyticsSites=['giorgi.app','smart-todolist.giorgi.app','hls-player.giorgi.app','auth.giorgi.app'] as const;
+export const analyticsSites=['angular-compiler.giorgi.app','example-mcp.giorgi.app','mcp.giorgi.app','api.giorgi.app','giorgi.app','smart-todolist.giorgi.app','hls-player.giorgi.app','auth.giorgi.app'] as const;
 export type AnalyticsSite=typeof analyticsSites[number];
 function table(){
  db().exec('CREATE TABLE IF NOT EXISTS site_analytics(day TEXT NOT NULL,site TEXT NOT NULL,kind TEXT NOT NULL,label TEXT NOT NULL,referrer TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(day,site,kind,label,referrer));CREATE TABLE IF NOT EXISTS analytics_migrations(name TEXT PRIMARY KEY)');

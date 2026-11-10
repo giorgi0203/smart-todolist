@@ -21,7 +21,7 @@ function table(){
 export function recordEvent(input:z.infer<typeof eventSchema>,ip:string,site:AnalyticsSite='giorgi.app'){
  const day=new Date().toISOString().slice(0,10),fingerprint=createHash('sha256').update(day+':'+ip).digest('hex');
  let referrer=(input.referrer||'').toLowerCase();
- if(!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(referrer)||['giorgi.app','www.giorgi.app'].includes(referrer))referrer='Direct';
+ if(!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(referrer)||(referrer===site||(site==='giorgi.app'&&referrer==='www.giorgi.app')))referrer='Direct';
  transaction(()=>{table();consumeRateLimits([{key:'analytics-minute:'+fingerprint,limit:20,windowMs:60000},{key:'analytics-day:'+fingerprint,limit:200,windowMs:86400000},{key:'analytics-global',limit:10000,windowMs:86400000}]);
  db().prepare('DELETE FROM site_analytics WHERE day<?').run(new Date(Date.now()-90*86400000).toISOString().slice(0,10));
  db().prepare('INSERT INTO site_analytics VALUES(?,?,?,?,?,1) ON CONFLICT(day,site,kind,label,referrer) DO UPDATE SET count=count+1').run(day,site,input.kind,input.label,referrer);

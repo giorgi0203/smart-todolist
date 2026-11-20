@@ -29,6 +29,6 @@ export async function startSession(userId:string) {
 }
 export async function endSession() {
   identityTables();const user=await currentUser();const jar=await cookies();
-  if(user){db().prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM learning_sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM identity_sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM sso_codes WHERE user_id=?").run(user.id);}
+  if(user){db().prepare("DELETE FROM external_app_sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM learning_sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM identity_sessions WHERE user_id=?").run(user.id);db().prepare("DELETE FROM sso_codes WHERE user_id=?").run(user.id);}
   jar.set(activeCookie(),"",{httpOnly:true,secure:new URL(appUrl()).protocol==="https:",sameSite:"lax",path:"/",maxAge:0});
 }
